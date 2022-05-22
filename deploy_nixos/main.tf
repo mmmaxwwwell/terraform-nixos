@@ -203,6 +203,23 @@ resource "null_resource" "deploy_nixos" {
     )
     command = "ignoreme"
   }
+
+  #copy the configuration.nix onto the remote machine so config.autoUpgrade
+  #doesn't destroy our machine state
+  provisioner "remote-exec" {
+    inline = [
+      "mkdir -p /etc/nixos",
+      "mkdir -p /etc/nixos-backup",
+      "chmod 600 /etc/nixos-backup",
+      "echo \"$(date +%s)\" > /etc/nixos-backup/DEPLOY_DATE",
+      "mkdir -p /etc/nixos-backup/$(cat /etc/nixos-backup/DEPLOY_DATE)",
+      "mv /etc/nixos/* /etc/nixos-backup/$(cat /etc/nixos-backup/DEPLOY_DATE)/ || exit 0"
+    ] 
+  }
+  provisioner "file" {
+    content = var.config
+    destination = "/etc/nixos/configuration.nix"
+  }
 }
 
 # --------------------------------------------------------------------------
