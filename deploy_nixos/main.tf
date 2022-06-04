@@ -87,6 +87,12 @@ variable "keys" {
   default     = {}
 }
 
+variable "user_keys" {
+  type        = map(map(string))
+  description = "A map of filename to content to upload as secrets in /var/user-keys. ex { key = { user = root, group = root, value = secret}}"
+  default     = {}
+}
+
 variable "target_system" {
   type        = string
   description = "Nix system string"
@@ -109,6 +115,12 @@ variable "delete_older_than" {
   type        = string
   description = "Can be a list of generation numbers, the special value old to delete all non-current generations, a value such as 30d to delete all generations older than the specified number of days (except for the generation that was active at that point in time), or a value such as +5 to keep the last 5 generations ignoring any newer than current, e.g., if 30 is the current generation +5 will delete generation 25 and all older generations."
   default     = "+1"
+}
+
+variable "install_bootloader" {
+  type        = bool
+  description = "If the bootloader should be force installed"
+  default     = false
 }
 
 # --------------------------------------------------------------------------
@@ -173,6 +185,17 @@ resource "null_resource" "deploy_nixos" {
     destination = "unpack-keys.sh"
   }
 
+  provisioner "file" {
+    content     = jsonencode(var.user_keys)
+    destination = "user-keys.json"
+  }
+
+  # FIXME: move this to nixos-deploy.sh
+  provisioner "file" {
+    source      = "${path.module}/user-keys.sh"
+    destination = "user-keys.sh"
+  }
+
   # FIXME: move this to nixos-deploy.sh
   provisioner "file" {
     source      = "${path.module}/maybe-sudo.sh"
@@ -181,8 +204,9 @@ resource "null_resource" "deploy_nixos" {
 
   provisioner "remote-exec" {
     inline = [
-      "chmod +x unpack-keys.sh maybe-sudo.sh",
+      "chmod +x unpack-keys.sh maybe-sudo.sh user-keys.sh",
       "./maybe-sudo.sh ./unpack-keys.sh ./packed-keys.json",
+      "./maybe-sudo.sh ./user-keys.sh ./user-keys.json",
     ]
   }
 
