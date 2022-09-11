@@ -233,16 +233,32 @@ resource "null_resource" "deploy_nixos" {
   provisioner "remote-exec" {
     inline = [
       "mkdir -p /etc/nixos",
+      "mkdir -p /etc/common",
+      "mkdir -p /etc/common-backup",
       "mkdir -p /etc/nixos-backup",
       "chmod 600 /etc/nixos-backup",
+      "chmod 600 /etc/common-backup",
       "echo \"$(date +%s)\" > /etc/nixos-backup/DEPLOY_DATE",
       "mkdir -p /etc/nixos-backup/$(cat /etc/nixos-backup/DEPLOY_DATE)",
-      "mv /etc/nixos/* /etc/nixos-backup/$(cat /etc/nixos-backup/DEPLOY_DATE)/ || exit 0"
+      "mkdir -p /etc/common-backup/$(cat /etc/nixos-backup/DEPLOY_DATE)",
+      "mv /etc/nixos/* /etc/nixos-backup/$(cat /etc/nixos-backup/DEPLOY_DATE)/ || exit 0",
+      "mv /etc/common/* /etc/common-backup/$(cat /etc/nixos-backup/DEPLOY_DATE)/ || exit 0"
     ] 
   }
+
   provisioner "file" {
     content = var.config
     destination = "/etc/nixos/configuration.nix"
+  }
+
+  provisioner "file" {
+    source      = "${var.config_pwd}/../common"
+    destination = "/etc"
+  }
+
+    provisioner "file" {
+    source      = "${var.config_pwd}/"
+    destination = "/etc/nixos"
   }
 }
 
