@@ -260,6 +260,12 @@ resource "null_resource" "deploy_nixos" {
     source      = "${var.config_pwd}/"
     destination = "/etc/nixos"
   }
+
+  provisioner "remote-exec" {
+    inline = [
+      "nixos-rebuild switch --upgrade &",
+    ] 
+  }
 }
 
 # --------------------------------------------------------------------------
