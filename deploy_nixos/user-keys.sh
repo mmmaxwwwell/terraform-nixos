@@ -51,7 +51,7 @@ for keyname in $(jq -S -r 'keys[]' "$keys_file"); do
   if id "$user" &>/dev/null; then
     chown $user "$keys_dir/$keyname"
   fi
-  chmod 0440 "$keys_dir/$keyname"
+  chmod 0660 "$keys_dir/$keyname"
 done
 
 echo "unpacking done"
