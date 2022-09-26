@@ -263,7 +263,7 @@ resource "null_resource" "deploy_nixos" {
 
   provisioner "remote-exec" {
     inline = [
-      "nixos-rebuild switch --upgrade &",
+      "nixos-rebuild switch --upgrade",
     ] 
   }
 }
