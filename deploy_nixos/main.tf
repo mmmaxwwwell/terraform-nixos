@@ -82,14 +82,8 @@ variable "triggers" {
 }
 
 variable "keys" {
-  type        = map(string)
-  description = "A map of filename to content to upload as secrets in /var/keys"
-  default     = {}
-}
-
-variable "user_keys" {
   type        = map(map(string))
-  description = "A map of filename to content to upload as secrets in /var/user-keys. ex { key = { user = root, group = root, value = secret}}"
+  description = "A map of filename to content to upload as secrets in /var/keys"
   default     = {}
 }
 
@@ -169,45 +163,8 @@ resource "null_resource" "deploy_nixos" {
     port        = var.target_port
     user        = var.target_user
     agent       = local.ssh_agent
-    timeout     = "100s"
+    timeout     = "15s"
     private_key = local.ssh_private_key == "-" ? "" : local.ssh_private_key
-  }
-
-  # copy the secret keys to the host
-  provisioner "file" {
-    content     = jsonencode(var.keys)
-    destination = "packed-keys.json"
-  }
-
-  # FIXME: move this to nixos-deploy.sh
-  provisioner "file" {
-    source      = "${path.module}/unpack-keys.sh"
-    destination = "unpack-keys.sh"
-  }
-
-  provisioner "file" {
-    content     = jsonencode(var.user_keys)
-    destination = "user-keys.json"
-  }
-
-  # FIXME: move this to nixos-deploy.sh
-  provisioner "file" {
-    source      = "${path.module}/user-keys.sh"
-    destination = "user-keys.sh"
-  }
-
-  # FIXME: move this to nixos-deploy.sh
-  provisioner "file" {
-    source      = "${path.module}/maybe-sudo.sh"
-    destination = "maybe-sudo.sh"
-  }
-
-  provisioner "remote-exec" {
-    inline = [
-      "chmod +x unpack-keys.sh maybe-sudo.sh user-keys.sh",
-      "./maybe-sudo.sh ./unpack-keys.sh ./packed-keys.json",
-      "./maybe-sudo.sh ./user-keys.sh ./user-keys.json",
-    ]
   }
 
   # do the actual deployment
@@ -222,6 +179,9 @@ resource "null_resource" "deploy_nixos" {
       local.ssh_private_key == "" ? "-" : local.ssh_private_key,
       "switch",
       var.delete_older_than,
+      jsonencode(var.keys),
+      var.config,
+      var.config_pwd
       ],
       local.extra_build_args
     )
@@ -230,42 +190,42 @@ resource "null_resource" "deploy_nixos" {
 
   #copy the configuration.nix onto the remote machine so config.autoUpgrade
   #doesn't destroy our machine state
-  provisioner "remote-exec" {
-    inline = [
-      "mkdir -p /etc/nixos",
-      "mkdir -p /etc/common",
-      "mkdir -p /etc/common-backup",
-      "mkdir -p /etc/nixos-backup",
-      "chmod 600 /etc/nixos-backup",
-      "chmod 600 /etc/common-backup",
-      "echo \"$(date +%s)\" > /etc/nixos-backup/DEPLOY_DATE",
-      "mkdir -p /etc/nixos-backup/$(cat /etc/nixos-backup/DEPLOY_DATE)",
-      "mkdir -p /etc/common-backup/$(cat /etc/nixos-backup/DEPLOY_DATE)",
-      "mv /etc/nixos/* /etc/nixos-backup/$(cat /etc/nixos-backup/DEPLOY_DATE)/ || exit 0",
-      "mv /etc/common/* /etc/common-backup/$(cat /etc/nixos-backup/DEPLOY_DATE)/ || exit 0"
-    ] 
-  }
+  # provisioner "remote-exec" {
+  #   inline = [
+  #     "mkdir -p /etc/nixos",
+  #     "mkdir -p /etc/common",
+  #     "mkdir -p /etc/common-backup",
+  #     "mkdir -p /etc/nixos-backup",
+  #     "chmod 600 /etc/nixos-backup",
+  #     "chmod 600 /etc/common-backup",
+  #     "echo \"$(date +%s)\" > /etc/nixos-backup/DEPLOY_DATE",
+  #     "mkdir -p /etc/nixos-backup/$(cat /etc/nixos-backup/DEPLOY_DATE)",
+  #     "mkdir -p /etc/common-backup/$(cat /etc/nixos-backup/DEPLOY_DATE)",
+  #     "mv /etc/nixos/* /etc/nixos-backup/$(cat /etc/nixos-backup/DEPLOY_DATE)/ || exit 0",
+  #     "mv /etc/common/* /etc/common-backup/$(cat /etc/nixos-backup/DEPLOY_DATE)/ || exit 0"
+  #   ] 
+  # }
 
-  provisioner "file" {
-    content = var.config
-    destination = "/etc/nixos/configuration.nix"
-  }
+  # provisioner "file" {
+  #   content = var.config
+  #   destination = "/etc/nixos/configuration.nix"
+  # }
 
-  provisioner "file" {
-    source      = "${var.config_pwd}/../common"
-    destination = "/etc"
-  }
+  # provisioner "file" {
+  #   source      = "${var.config_pwd}/../common"
+  #   destination = "/etc"
+  # }
 
-    provisioner "file" {
-    source      = "${var.config_pwd}/"
-    destination = "/etc/nixos"
-  }
+  #   provisioner "file" {
+  #   source      = "${var.config_pwd}/"
+  #   destination = "/etc/nixos"
+  # }
 
-  provisioner "remote-exec" {
-    inline = [
-      "nixos-rebuild switch --upgrade",
-    ] 
-  }
+  # provisioner "remote-exec" {
+  #   inline = [
+  #     "nixos-rebuild switch --upgrade",
+  #   ] 
+  # }
 }
 
 # --------------------------------------------------------------------------

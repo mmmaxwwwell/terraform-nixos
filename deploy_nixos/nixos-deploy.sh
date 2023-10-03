@@ -34,7 +34,11 @@ buildOnTarget="$5"
 sshPrivateKey="$6"
 action="$7"
 deleteOlderThan="$8"
-shift 8
+userKeysJson="$9"
+shift 9
+configFile="$1"
+configDirectory="$2"
+shift 2
 
 # remove the last argument
 set -- "${@:1:$(($# - 1))}"
@@ -70,7 +74,7 @@ targetHostCmd() {
   # Tested with OpenSSH_7.9p1.
   #
   # shellcheck disable=SC2029
-  ssh "${sshOpts[@]}" "$targetHost" "./maybe-sudo.sh ${*@Q}"
+  ssh "${sshOpts[@]}" "$targetHost" "${*@Q}"
 }
 
 # Setup a temporary ControlPath for this session. This speeds-up the
@@ -96,6 +100,28 @@ setupControlPath() {
 ### Main ###
 
 setupControlPath
+
+# Fallback if jq is not installed
+if ! type -p jq &>/dev/null; then
+  jqOut=$(nix-build '<nixpkgs>' -A jq)
+  jq() {
+    "$jqOut/bin/jq" "$@"
+  }
+fi
+
+targetHostCmd mkdir -m 0750 -p /var/keys
+targetHostCmd chmod -v 0750 /var/keys
+targetHostCmd rm -rf "/var/keys/*"
+
+for keyname in $(echo "$userKeysJson" | jq -S -r 'keys[]' ); do
+  user=$(echo -n "$userKeysJson" | jq -r ".\"$keyname\".\"user\"")
+  group=$(echo -n "$userKeysJson" | jq -r ".\"$keyname\".\"group\"")
+  value=$(echo -n "$userKeysJson" | jq -r ".\"$keyname\".\"value\"")
+  ssh "${sshOpts[@]}" "$targetHost" "echo \"$value\" | sudo tee "/var/keys/$keyname""
+  targetHostCmd chgrp "$group" "/var/keys/$keyname"
+  targetHostCmd chown "$user" "/var/keys/$keyname"
+  targetHostCmd chmod "0440" "/var/keys/$keyname"
+done
 
 if [[ "${buildOnTarget:-false}" == true ]]; then
 
@@ -131,3 +157,12 @@ log "collecting old nix derivations"
 # to keep generations with those numbers
 targetHostCmd "nix-env" "--profile" "$profile" "--delete-generations" $deleteOlderThan
 targetHostCmd "nix-store" "--gc"
+
+#copy our working directory and common dirs to the host so they can nixos-rebuild switch on their own
+targetHostCmd rm -rf /etc/nixos/
+targetHostCmd rm -rf /etc/common/
+targetHostCmd mkdir -p /etc/nixos
+targetHostCmd mkdir -p /etc/common
+ssh "${sshOpts[@]}" "$targetHost" "echo '$configFile' | sudo tee /etc/nixos/configuration.nix"
+scp -r -o "ControlPath=$workDir/ssh_control" $PWD/$configDirectory/* $targetHost:/etc/nixos/ 
+scp -r -o "ControlPath=$workDir/ssh_control" $PWD/$configDirectory/../common/* $targetHost:/etc/common/
